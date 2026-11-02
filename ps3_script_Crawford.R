@@ -223,7 +223,107 @@ retail_nsa_13 <- retail_ts |>
 
 # Graphing seasonally adjusted data
 retail_nsa_13 |> autoplot()
-# The season adjust column highest is around 1.2 which means that his month is around 20% above the trend. The highest months is december, and started with a value of 1.1 and grew to the 1.2. The gas production in December seems to grow on average every year. 
+# The season adjust column highest is around 1.2 which means that his month is around 20% above the trend. The highest months is December, and started with a value of 1.1 and grew to the 1.2. The gas production in December seems to grow on average every year. 
 
+# Comparing the seasonally adjusted data
+sa_compare <- retail_nsa_13 |> 
+  as_tibble() |> 
+  select(Month, mine = season_adjust) |>
+  left_join(
+    retail_ts |> 
+      filter(series_id == "RSAFS") |> 
+      as_tibble() |> 
+      transmute(Month, census = sales),
+    by = "Month"
+  ) |> 
+  mutate(pct_dif = 100 * (log(mine) - log(census)))
 
+# Plotting the difference between my seasonally adjusted data and the Census Bureau's
+sa_compare |> 
+  ggplot(aes(x = Month, y = pct_dif)) +
+  geom_line() +
+  labs(
+    title = "My X-13 Seasonal Adjustment Minus the Census Bureau's",
+    x = NULL,
+    y = "Difference (%)") +
+  theme_minimal()
+# Using the default options for seasonally adjusting the data does a fairly good job in the first quarter of the series. After that the difference starts to gets bigger as the series continues, especially around covid. Looks like the default inst good for adjusting for global pandemics. 
+
+# Time series linear model for Canadian gas production with seasonal dummies
+can_gas_fit <- can_gas |> 
+  model(TSLM(log_volume ~ trend() + season()))
+
+# Table of model coefficients
+report(can_gas_fit)
+
+# Better table of model coefficients
+can_gas_fit |> 
+  tidy() |> 
+  select(term, estimate, std.error, statistic, p.value) |> 
+  knitr::kable(digits = 3)
+
+# Comparing fitted and actual values of Canadian gas production
+can_gas_fit |> 
+  augment() |> 
+  ggplot(aes(x = Month)) +
+  geom_line(aes( y = log_volume, color = "Actual")) +
+  geom_line(aes( y = .fitted, color = "Fitted")) +
+  labs(
+    title = "Linear Trend + Seasonal Dummies Fit: Canadian Gas Production",
+    y = "log(volume)", color = NULL) +
+  theme_minimal()
+# The fitted trend does not fit the actual data in the beginning and middle of series. The fitted trend tracks the actual better during the last third of the series. Overall, I think the fitted does an okay job, but I don't think it has predictive abilities past the year 2000.
+
+# Checking residuals of Canadian gas production model
+can_gas_fit |> gg_tsresiduals()
+
+# Using the formal Ljung-Box test to check for autocorrelation in the residuals
+can_gas_fit |> 
+  augment() |> 
+  features(.innov, ljung_box, lag = 24)
+# The ljung-box test displayed a p_value of 0, which means we have enough evidence to reject the null that the residuals are independent and are white noise. This means that the residuals are correlated and there is more to be modeled. 
+
+# Forecasting Canadian gas production using the TSLM model with and expanding window
+gas_cv_fc <- can_gas |> 
+  select(Month, Volume) |> 
+  slice(-n()) |> 
+  stretch_tsibble(.init = 240, .step =1) |> 
+  model(snaive = SNAIVE(Volume),
+        tslm = TSLM(log(Volume) ~ trend() + season())) |> 
+  forecast(h = 1)
+
+# Comparing the accuracy of the two forecasting models
+gas_cv_fc |> 
+  accuracy(can_gas, measures = list(MAE = MAE, RMSE = RMSE))
+
+# First observation date: Jan 1980
+# Last observation date: Feb 2005
+#The model that has the lowest MAE and RMSE is teh seasonal random walk model. THis means that the seasonal random walk model is the better model to use for forecasting Canadian gas production.
+
+# Diebold-Marino Test
+errs <- gas_cv_fc |> 
+  as_tibble() |> 
+  left_join(as_tibble(can_gas) |> 
+              select(Month, actual = Volume),
+            by = "Month") |> 
+  mutate( e = actual - .mean) |> 
+  select(Month, .model, e) |> 
+  pivot_wider(names_from = .model, values_from = e) |> 
+  na.omit() 
+
+forecast::dm.test(errs$snaive, errs$tslm, h = 1, power = 1)
+# The diebold-marino test has a p-value of 2.2e-16 which is statistically significant, meaning I can reject the null hypotheis that the two models are equally accurate. With a DM = -31.278, means that the seasonal random walk model is more accurate than the time series linear model. 
+
+# Forecasting using a rolling window
+gas_cv_fc_slide <- can_gas |> 
+  select(Month, Volume) |> 
+  slice(-n()) |> 
+  slide_tsibble(.size = 240, .step = 1) |> 
+  model(snaive = SNAIVE(Volume),
+        tslm = TSLM(log(Volume) ~ trend() + season())) |>
+  forecast(h = 1)
+
+gas_cv_fc_slide |> 
+  accuracy(can_gas, measures = list(MAE = MAE, RMSE = RMSE))
+# The rolling window model has a lower MAE and RMSE than the expanding model. This is consistent with the forecasting techniques, becaues the fitted values from before show a consistent growth over the period of the series. I know that if a series changes over time than a rolling window will supply a more accurate forecast than an expanding window.
 
