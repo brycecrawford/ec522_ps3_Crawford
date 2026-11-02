@@ -82,5 +82,102 @@ head(can_gas_q)
 can_gas_q |> autoplot(Volume)
 # The quarterly series appear to be seasonal. Volume tends to decrease from December to June and increase from June to December. The reason we sum the volume instead of taking the mean is because volume is the level of quantity that is produced and not a variable to show the level at a period of time.
 
+#plotting sales
+retail_ts |>  autoplot(sales)
+
+#
+retail_ts |> 
+  autoplot(sales) +
+  labs(
+    title = "U.S. Retail and Food Services Sales",
+    subtitle = "Seasonally adjusted vs. no seaonally adjusted",
+    x = NULL, 
+    y = "Millions of Dollars", 
+    color = NULL) +
+  theme_minimal()
+#In the non-seasonally adjusted data, there is a quarterly season incline and drop every year. This is consistent throughout the entire series until covid where there are noticeably bigger drops. 
+# The two data sets follow the same trend throughout the series, while the non-seasonally adjusted data has higher peaks and lower troughs. 
+
+#Plotting Canadian gas all observations
+can_gas |> 
+  autoplot(Volume) +
+  labs(
+    title = "Canadian Gas Production",
+    x = NULL,
+    y = "Billions of Cubic Meters (CMB)") +
+  theme_minimal(
+  )
+
+# Plot of retail sales with a linear trend line
+retail_ts |> 
+  autoplot(sales) +
+  labs(
+    title = "U.S. Retail and Food Services Sales",
+    x = NULL,
+    y = "Retail Sales in Billions ($)") +
+  scale_y_continuous(labels = scales::label_dollar(scale = 1/1000) )
+# I chose to scale the y axis to it easier to interpret the scale of retail sales. Before the transformation it would $400,000 million dollars which is not intuitive to read. I changed it to reflect an easier interpretation of $400 Billion. 
+
+# Yes the season swings get larger as the series grow. There is a shock during 2021 but returns to  the trending seasonality. 
+
+# Adding log volume to data frame
+can_gas <-  can_gas |> 
+  mutate( log_volume = log(Volume))
+
+# Plotting log volume
+can_gas |> autoplot(log_volume)
+# Instead of treading upward, the log transformation has a almost downward trending slope. As the series continues, there seems to be a top out of around a 3% change. 
+# I do not think this log transformation is a good candidate for a model to capture a linear trend. The linear model would not do a good job predicting the change post 2000 since it seems to be leveling off. 
+
+# Adding a log sales variable to RSAFSNA dataframe
+retail_log_ts <- retail_ts |> 
+  mutate( log_sales = log(sales)) |> 
+  filter( series_id == "RSAFSNA")
+
+# Plotting log sales from RSAFSNA
+retail_log_ts |> autoplot(log_sales) +
+  labs( title = " Log Sales of U.S. Retail and Services")
+
+#Plotting sales levels from RSAFSNA 
+retail_log_ts |> autoplot(sales) + 
+  labs(title = "Sales of U.S. Retail and Services")
+# After making a log transformation, the data set is a better candidate for applying the log and using a model to capture the linear trend than trying to fit eh model to original level of sales. 
+# Looking at the plot, the log sales look to be more linear than the levels.
+
+# Computing first differences to Canadian gas production data frame
+can_gas <- can_gas |> 
+  mutate(
+    growth_direct = 100 * difference(Volume) / lag(Volume),
+    growth_logdiff = 100 * difference(log(Volume)))
+
+# Plotting first differences of volume
+can_gas |> autoplot(growth_direct)
+
+# Plotting first difference of growth of volume
+can_gas <- can_gas |> 
+  mutate( growth_gap = abs(growth_direct - growth_logdiff))
+
+#Plotting differences between growth direct and growth log diff
+can_gas |> autoplot(growth_gap)
+# Plotting growth_gap makes the seasonality but does show a general decrease over time of the growth between variables meaning that growth find a a near stationary point in the long run.
+## Type here ##
+
+# Computing month over month change to retail sales
+retail_ts <- retail_ts |> 
+  group_by(series_id) |> 
+  mutate( growth_mom = 100* difference(log(sales))) |> 
+  ungroup()
+
+# Plotting month over month retail sales
+retail_ts |> 
+  autoplot(growth_mom) +
+  labs(
+    title = " Month-Over-Month Growth: SA vs NSA Retail Sales",
+    x = NULL, 
+    y = "Growth Rate (%)",
+    color = NULL) +
+  theme_minimal()
+# The non-seasonal sales data is much noisier than the seasonally adjusted data. This is consistent with the 2.7b. This is noisier than the seasonally adjusted because the month over month growth is accounting for the seasonal growth and not the unweighted levels. 
+
 
 
