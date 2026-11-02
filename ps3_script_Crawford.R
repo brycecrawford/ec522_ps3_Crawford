@@ -179,5 +179,51 @@ retail_ts |>
   theme_minimal()
 # The non-seasonal sales data is much noisier than the seasonally adjusted data. This is consistent with the 2.7b. This is noisier than the seasonally adjusted because the month over month growth is accounting for the seasonal growth and not the unweighted levels. 
 
+# Plotting seasonality of sales
+retail_ts |> 
+  filter(series_id == "RSAFSNA") |> 
+  gg_season(sales) + 
+  labs(
+    title = "Season Pattern in NSA Retail Sales",
+    y = "Millions of Dollars") +
+  theme_minimal()
+
+# Showing levels of sales seaonally adjusted
+retail_ts |> 
+  filter(series_id == "RSAFS") |> 
+  gg_season(sales) +
+  labs(
+    title = "Seasonal Pattern in SA Retail Sales",
+    y = "Millions of Dollars") +
+  theme_minimal()
+  
+#
+can_gas |> 
+  gg_season(log_volume) +
+  labs(
+    title = " Seasonal Pattern in Gas Production in Canada",
+    y = "Millions of Cubic Meters") + 
+  theme_minimal()
+# There is a clear seasonal patter in the gas production. From around may, gas productions decline until it hits its trough, then increases until December where it hits its peak. 
+# This is consistent with how gas is used. People use more gas to heat their home in the colder months so gas production naturally increases in the fall and decreases in the spring. 
+
+# Creating sub series plot for log of volume
+can_gas |> 
+  gg_subseries(log_volume) +
+  labs( 
+    title = "Subseries Plot: Canadian Gas Production",
+    y = "log(Volume)") +
+  theme_minimal()
+
+# seasonally adjusting Canadian gas production
+retail_nsa_13 <- retail_ts |> 
+  filter(series_id == "RSAFSNA") |> 
+  model(x13 = X_13ARIMA_SEATS(sales)) |> 
+  components()
+
+# Graphing seasonally adjusted data
+retail_nsa_13 |> autoplot()
+# The season adjust column highest is around 1.2 which means that his month is around 20% above the trend. The highest months is december, and started with a value of 1.1 and grew to the 1.2. The gas production in December seems to grow on average every year. 
+
 
 
